@@ -185,6 +185,42 @@ rescue LoadError; end
 
 module Haml
   module Filters
+    
+    begin
+      require 'tilt'
+
+      # Generate a filter for everything Tilt supports
+      Tilt.mappings.keys.each do |ext|
+        filter = Module.new do
+          attr_accessor
+          def self.internal_compile(compiler, text)
+            # TODO: figure out which templates can eval, and only do interpolation
+            # in non-eval-ing template systems?
+            return if compiler.options[:suppress_eval]
+            
+            ext = @ext
+
+            compiler.instance_eval do
+              text = unescape_interpolation(text).gsub(/(\\+)n/) do |s|
+                escapes = $1.size
+                next s if escapes % 2 == 0
+                ("\\" * (escapes - 1)) + "\n"
+              end
+
+              text = "\n" + text.sub(/\n"\Z/, "\\n\"")
+                
+              push_script <<-RUBY.rstrip, :escape_html => false
+                Tilt['#{ext}'].new { #{text} }.render(self)
+              RUBY
+            end
+          end
+        end
+        filter.instance_variable_set :@ext, ext
+        Filters.defined[ext] = filter
+      end
+    rescue LoadError; end
+
+
     # Does not parse the filtered text.
     # This is useful for large blocks of text without HTML tags,
     # when you don't want lines starting with `.` or `-`
@@ -303,48 +339,48 @@ END
     end
 
     # Parses the filtered text with {Sass} to produce CSS output.
-    module Sass
-      include Base
-      lazy_require 'sass/plugin'
+#    module Sass
+#      include Base
+#      lazy_require 'sass/plugin'
 
       # @see Base#render
-      def render(text)
-        ::Sass::Engine.new(text, ::Sass::Plugin.engine_options).render
-      end
-    end
+#      def render(text)
+#        ::Sass::Engine.new(text, ::Sass::Plugin.engine_options).render
+#      end
+#    end
 
     # Parses the filtered text with ERB.
     # Not available if the {file:HAML_REFERENCE.md#suppress_eval-option `:suppress_eval`} option is set to true.
     # Embedded Ruby code is evaluated in the same context as the Haml template.
-    module ERB
-      include Base
-      lazy_require 'erb'
+#    module ERB
+#      include Base
+#      lazy_require 'erb'
 
       # @see Base#compile
-      def compile(compiler, text)
-        return if compiler.options[:suppress_eval]
-        src = ::ERB.new(text).src.sub(/^#coding:.*?\n/, '').
-          sub(/^_erbout = '';/, "")
-        compiler.send(:push_silent, src)
-      end
-    end
+#      def compile(compiler, text)
+#        return if compiler.options[:suppress_eval]
+#        src = ::ERB.new(text).src.sub(/^#coding:.*?\n/, '').
+#          sub(/^_erbout = '';/, "")
+#        compiler.send(:push_silent, src)
+#      end
+#    end
 
     # Parses the filtered text with [Textile](http://www.textism.com/tools/textile).
     # Only works if [RedCloth](http://redcloth.org) is installed.
-    module Textile
-      include Base
-      lazy_require 'redcloth'
+#    module Textile
+#      include Base
+#      lazy_require 'redcloth'
 
       # @see Base#render
-      def render(text)
-        ::RedCloth.new(text).to_html(:textile)
-      end
-    end
+#      def render(text)
+#        ::RedCloth.new(text).to_html(:textile)
+#      end
+#    end
     # An alias for the Textile filter,
     # since the only available Textile parser is RedCloth.
     # @api public
-    RedCloth = Textile
-    Filters.defined['redcloth'] = RedCloth
+#    RedCloth = Textile
+#    Filters.defined['redcloth'] = RedCloth
 
     # Parses the filtered text with [Markdown](http://daringfireball.net/projects/markdown).
     # Only works if [RDiscount](https://github.com/rtomayko/rdiscount),
@@ -352,52 +388,52 @@ END
     # [Maruku](http://maruku.rubyforge.org),
     # [Redcarpet](https://github.com/tanoku/redcarpet),
     # or [Kramdown](https://github.com/gettalong/kramdown) are installed.
-    module Markdown
-      include Base
-      lazy_require 'rdiscount', 'peg_markdown', 'maruku', 'bluecloth', 'redcarpet', 'kramdown'
+#    module Markdown
+#      include Base
+#      lazy_require 'rdiscount', 'peg_markdown', 'maruku', 'bluecloth', 'redcarpet', 'kramdown'
 
       # @see Base#render
-      def render(text)
-        engine = case @required
-                 when 'rdiscount'
-                   ::RDiscount
-                 when 'peg_markdown'
-                   ::PEGMarkdown
-                 when 'maruku'
-                   ::Maruku
-                 when 'bluecloth'
-                   ::BlueCloth
-                 when 'redcarpet'
-                   ::Redcarpet
-                 when 'kramdown'
-                   ::Kramdown::Document
-                 end
-        engine.new(text).to_html
-      end
-    end
+#      def render(text)
+#        engine = case @required
+#                 when 'rdiscount'
+#                   ::RDiscount
+#                 when 'peg_markdown'
+#                   ::PEGMarkdown
+#                 when 'maruku'
+#                   ::Maruku
+#                 when 'bluecloth'
+#                   ::BlueCloth
+#                 when 'redcarpet'
+#                   ::Redcarpet
+#                 when 'kramdown'
+#                   ::Kramdown::Document
+#                 end
+#        engine.new(text).to_html
+#      end
+#    end
 
     # Parses the filtered text with [Maruku](http://maruku.rubyforge.org),
     # which has some non-standard extensions to Markdown.
-    module Maruku
-      include Base
-      lazy_require 'maruku'
+#    module Maruku
+#      include Base
+#      lazy_require 'maruku'
 
       # @see Base#render
-      def render(text)
-        ::Maruku.new(text).to_html
-      end
-    end
+#      def render(text)
+#        ::Maruku.new(text).to_html
+#      end
+#    end
 
     # Parses the filtered text with [Redcarpet](https://github.com/tanoku/redcarpet)
-    module Redcarpet
-      include Base
-      lazy_require 'redcarpet'
+#    module Redcarpet
+#      include Base
+#      lazy_require 'redcarpet'
 
       # @see Base#render
-      def render(text)
-        ::Redcarpet.new(text).to_html
-      end
-    end
+#      def render(text)
+#        ::Redcarpet.new(text).to_html
+#      end
+#    end
 
   end
 end
